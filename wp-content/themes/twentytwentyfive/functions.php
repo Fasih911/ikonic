@@ -156,3 +156,171 @@ if ( ! function_exists( 'twentytwentyfive_format_binding' ) ) :
 		}
 	}
 endif;
+
+
+function custom_post_type_projects() {
+    $args = array(
+        'label'               => __('Projects', 'textdomain'),
+        'public'              => true,
+        'show_in_rest'        => true, // Enables Gutenberg support
+        'supports'            => array('title', 'editor', 'thumbnail', 'excerpt'),
+        'has_archive'         => true, // ✅ Enables pagination support
+        'rewrite'             => array('slug' => 'projects', 'with_front' => false),
+        'menu_icon'           => 'dashicons-portfolio',
+        'query_var'           => true, // ✅ Ensures pagination works
+    );
+    register_post_type('projects', $args);
+}
+add_action('init', 'custom_post_type_projects');
+
+// Register Custom Taxonomy "Project Type"
+function custom_taxonomy_project_type() {
+    $args = array(
+        'label'             => __('Project Type', 'textdomain'),
+        'public'            => true,
+        'show_in_rest'      => true, // Enables Gutenberg support
+        'hierarchical'      => true,
+        'rewrite'           => array('slug' => 'project-type'),
+    );
+    register_taxonomy('project-type', array('projects'), $args);
+}
+add_action('init', 'custom_taxonomy_project_type');
+
+// Modify Query to Show 6 Projects Per Page
+function modify_projects_archive_query($query) {
+    if (!is_admin() && $query->is_main_query() && is_post_type_archive('projects')) {
+        $query->set('posts_per_page', 6); // ✅ Limits to 6 projects per page
+    }
+}
+add_action('pre_get_posts', 'modify_projects_archive_query');
+
+
+// Register AJAX action for logged-in and non-logged-in users
+add_action('wp_ajax_get_architecture_projects', 'get_architecture_projects');
+add_action('wp_ajax_nopriv_get_architecture_projects', 'get_architecture_projects');
+
+function get_architecture_projects() {
+    // Check if the user is logged in
+    $posts_per_page = is_user_logged_in() ? 6 : 3;
+
+    // Query projects that belong to the "Architecture" project type
+    $args = array(
+        'post_type'      => 'projects',
+        'posts_per_page' => $posts_per_page,
+        'tax_query'      => array(
+            array(
+                'taxonomy' => 'project-type',
+                'field'    => 'slug',
+                'terms'    => 'architecture', // Filtering by project type
+            ),
+        ),
+    );
+
+    $query = new WP_Query($args);
+    $projects = array();
+
+    if ($query->have_posts()) {
+        while ($query->have_posts()) {
+            $query->the_post();
+            $projects[] = array(
+                'id'    => get_the_ID(),
+                'title' => get_the_title(),
+                'link'  => get_permalink(),
+            );
+        }
+    }
+    
+    wp_reset_postdata();
+
+    // Return the JSON response
+    wp_send_json(array(
+        'success' => true,
+        'data'    => $projects
+    ));
+
+    wp_die();
+}
+
+function enqueue_jquery() {
+    wp_enqueue_script('jquery');
+}
+add_action('wp_enqueue_scripts', 'enqueue_jquery');
+
+function enqueue_ajax_script() {
+    wp_enqueue_script('custom-ajax', get_template_directory_uri() . '/assets/js/custom-ajax.js', array('jquery'), null, true);
+
+    // Pass the Ajax URL to the script
+    wp_localize_script('custom-ajax', 'ajax_object', array(
+        'ajax_url' => admin_url('admin-ajax.php')
+    ));
+}
+add_action('wp_enqueue_scripts', 'enqueue_ajax_script');
+
+
+function hs_give_me_coffee() {
+    $api_url = "https://coffee.alexflipnote.dev/random.json"; // API endpoint
+
+    // Fetch data using WordPress HTTP API
+    $response = wp_remote_get($api_url);
+
+    // Check if the response is valid
+    if (is_wp_error($response)) {
+        return 'Error fetching coffee image';
+    }
+
+    // Decode JSON response
+    $body = wp_remote_retrieve_body($response);
+    $data = json_decode($body, true);
+
+    // Return the coffee image URL if it exists
+    if (!empty($data['file'])) {
+        return esc_url($data['file']);
+    }
+
+    return 'No coffee image found!';
+}
+
+function coffee_shortcode() {
+    return '<img src="' . hs_give_me_coffee() . '" alt="Random Coffee">';
+}
+add_shortcode('coffee', 'coffee_shortcode');
+
+
+function hs_get_kanye_quotes() {
+    $api_url = "https://api.kanye.rest"; // API endpoint
+    $quotes = array(); // Array to store quotes
+
+    // Fetch 5 quotes
+    for ($i = 0; $i < 5; $i++) {
+        $response = wp_remote_get($api_url);
+
+        // Check if the response is valid
+        if (!is_wp_error($response)) {
+            $body = wp_remote_retrieve_body($response);
+            $data = json_decode($body, true);
+
+            // Add quote if it exists
+            if (!empty($data['quote'])) {
+                $quotes[] = esc_html($data['quote']);
+            }
+        }
+    }
+
+    // Display the quotes in an unordered list
+    if (!empty($quotes)) {
+        $output = '<div class="kanye-quotes"><h2>Kanye West Quotes</h2><ul>';
+        foreach ($quotes as $quote) {
+            $output .= '<li>"' . $quote . '"</li>';
+        }
+        $output .= '</ul></div>';
+        return $output;
+    }
+
+    return 'No quotes found!';
+}
+
+// Create a shortcode to display the quotes on a page
+function hs_kanye_quotes_shortcode() {
+    return hs_get_kanye_quotes();
+}
+add_shortcode('kanye_quotes', 'hs_kanye_quotes_shortcode');
