@@ -2,7 +2,7 @@ jQuery(document).ready(function ($) {
   $("#load-projects").click(function () {
     $.ajax({
       type: "POST",
-      url: ajax_object.ajax_url, // ✅ Use the correct URL
+      url: ajax_object.ajax_url,
       data: { action: "get_architecture_projects" },
       success: function (response) {
         console.log(response);
